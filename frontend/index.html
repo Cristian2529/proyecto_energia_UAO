@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Análisis de Consumo Eléctrico</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f6f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .hidden { display: none; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .metric { text-align: center; padding: 10px; background: #eef2f7; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+    <!-- Módulo de Login -->
+    <div id="login-section" class="card" style="max-width: 400px; margin: 50px auto;">
+        <h2>Iniciar Sesión</h2>
+        <input type="text" id="username" placeholder="Usuario (admin/usuario)" style="width: 90%; padding: 8px; margin-bottom: 10px;"><br>
+        <input type="password" id="password" placeholder="Contraseña (admin123/user123)" style="width: 90%; padding: 8px; margin-bottom: 10px;"><br>
+        <button onclick="login()" style="width: 96%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px;">Ingresar</button>
+        <p id="login-error" style="color: red;"></p>
+    </div>
+
+    <!-- Módulo de Dashboard -->
+    <div id="dashboard-section" class="hidden">
+        <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>Dashboard de Consumo de Energía</h2>
+            <div>
+                <span id="user-info"></span>
+                <button onclick="logout()" style="margin-left: 10px; padding: 5px 10px;">Cerrar Sesión</button>
+            </div>
+        </div>
+
+        <div class="card grid">
+            <div class="metric">
+                <h3>Promedio Potencia</h3>
+                <p id="prom-potencia">- kW</p>
+            </div>
+            <div class="metric">
+                <h3>Potencia Máxima</h3>
+                <p id="max-potencia">- kW</p>
+            </div>
+            <div class="metric">
+                <h3>Promedio Voltaje</h3>
+                <p id="prom-voltaje">- V</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <canvas id="graficaConsumo"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+
+        async function login() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+
+            const res = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('role', data.role);
+                localStorage.setItem('username', data.username);
+                mostrarDashboard();
+            } else {
+                document.getElementById('login-error').innerText = data.error;
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            location.reload();
+        }
+
+        function mostrarDashboard() {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+            document.getElementById('user-info').innerText = `Rol: ${localStorage.getItem('role')} (${localStorage.getItem('username')})`;
+
+            cargarEstadisticas();
+            cargarGrafica();
+        }
+
+        async function cargarEstadisticas() {
+            const res = await fetch(`${API_URL}/estadisticas/resumen`);
+            const data = await res.json();
+
+            document.getElementById('prom-potencia').innerText = `${data.promedio_potencia.toFixed(2)} kW`;
+            document.getElementById('max-potencia').innerText = `${data.max_potencia.toFixed(2)} kW`;
+            document.getElementById('prom-voltaje').innerText = `${data.promedio_voltaje.toFixed(2)} V`;
+        }
+
+        async function cargarGrafica() {
+            const res = await fetch(`${API_URL}/consumo?limit=30`);
+            const datos = await res.json();
+
+            const etiquetas = datos.map(item => item.time);
+            const valoresPotencia = datos.map(item => item.global_active_power);
+
+            const ctx = document.getElementById('graficaConsumo').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: etiquetas,
+                    datasets: [{
+                        label: 'Potencia Activa Global (kW)',
+                        data: valoresPotencia,
+                        borderColor: '#007bff',
+                        tension: 0.1
+                    }]
+                }
+            });
+        }
+
+        if (localStorage.getItem('token')) {
+            mostrarDashboard();
+        }
+    </script>
+</body>
+</html>
